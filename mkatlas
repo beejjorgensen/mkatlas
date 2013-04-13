@@ -1,0 +1,203 @@
+#!/bin/bash
+#
+# mkatlas
+#
+# Build image atlases (sprites)
+#
+# Script dependencies: bash, ImageMagick (convert, identify)
+# Optional dependencies: pngcrush
+#
+# TODO:
+#   JPEG
+#   different metadata output types
+#
+
+IFS=$'\n'
+
+SCRIPTNAME=$(basename $0)
+
+function usageexit {
+	printf "usage: %s -o outfile [options] image [image2 ...]\n\n" $SCRIPTNAME 1>&2
+	printf "   -n val       set the namespace (prefix) for all variables\n" 1>&2
+	printf "   -r val       set the relative path to the image in the CSS\n" 1>&2
+	printf "   -f #rrggbb   flatten the output with the specified background\n" 1>&2
+	exit 1
+}
+
+outfilename=""
+prefix=""
+relpath=""
+flatcolor=""
+images=""
+
+# parse command line
+while [ $# -gt 0 ]; do
+	if [ "$1" = "-h" -o "$1" = "--help" ]; then
+		usageexit
+
+	elif [ "$1" = "-n" ]; then
+		shift
+		if [ $# -lt 1 ]; then usageexit; fi
+		prefix=$1
+
+	elif [ "$1" = "-r" ]; then
+		shift
+		if [ $# -lt 1 ]; then usageexit; fi
+		relpath=$1
+	
+	elif [ "$1" = "-o" ]; then
+		shift
+		if [ $# -lt 1 ]; then usageexit; fi
+		outfilename=$1
+	
+	elif [ "$1" = "-f" ]; then
+		shift
+		if [ $# -lt 1 ]; then usageexit; fi
+		flatcolor=$1"ff"
+
+	else
+		images="$images"$'\n'"$1"
+	fi
+
+	shift
+done
+
+if [ "x$images" = "x" ]; then
+	usageexit
+fi
+
+if [ "x$outfilename" = "x" ]; then
+	usageexit
+fi
+
+# get all image offsets
+
+pxpos=0
+pypos=0
+rowcount=0
+maxheight=0
+rowfiles=() # all the files that will be on this row
+rowfile_new_width=()
+rowfile_new_height=()
+imgnamelist=""
+
+for i in $images; do
+	imgname="$i"
+
+	if [ "x$imgname" = "xBR" ]; then
+		pxpos=0
+		rowcount=$(($rowcount+1))
+		pypos=$(($pypos+$maxheight))
+		maxheight=0
+		continue
+	fi
+
+	#bname=$(basename $imgname)
+	imgnorm=${prefix}$(printf "%s" ${imgname%.*} | tr -cd '[:alnum:]' | tr '[a-z]' '[A-Z]')
+
+	imgnamelist="$imgnamelist"$'\n'"$imgnorm"
+
+	printf "[[ %s = '%s' ]]\n" "${imgnorm}_FILENAME" $imgname
+	printf "[[ %s = '%s' ]]\n" "${imgnorm}_ATLAS" ${relpath}$(basename ${outfilename})
+
+	wh=$(identify -format "%w,%h" $imgname)
+
+	w=${wh%,*} # height of actual image, unpadded
+	h=${wh#*,}
+
+	w12=$((($w+1)/2))  # +1 to round up
+	h12=$((($h+1)/2))
+
+	# add at least 1 px padding (bottom and right) to an even value:
+	if [ $(($w%2)) -eq 0 ]; then
+		pwidth=$(($w+2))
+	else
+		pwidth=$(($w+1))
+	fi
+	if [ $(($h%2)) -eq 0 ]; then
+		pheight=$(($h+2))
+	else
+		pheight=$(($h+1))
+	fi
+
+	# pad the image
+	pimgname="$SCRIPTNAME.tmp.$(basename $imgname .png).$$.png"
+	convert -background none $imgname -extent ${pwidth}x${pheight} $pimgname
+
+	# offsets after padding
+	pxpos12=$(($pxpos/2))  # pos is always even due to padding
+	pypos12=$(($pypos/2))
+
+	if [ $pheight -gt $maxheight ]; then
+		maxheight=$pheight
+	fi
+
+	printf "[[ %s = -%s ]]\n" "${imgnorm}_X" $pxpos
+	printf "[[ %s = -%s ]]\n" "${imgnorm}_Y" $pypos
+	printf "[[ %s = '-%spx -%spx; /* %s */' ]]\n" "${imgnorm}_XYCSS" $pxpos $pypos $imgname
+	printf "[[ %s = '-%spx -%spx; /* %s */' ]]\n" "${imgnorm}_XYCSS12" $pxpos12 $pypos12 $imgname
+
+	printf "[[ %s = %s ]]\n" "${imgnorm}_W" $w
+	printf "[[ %s = %s ]]\n" "${imgnorm}_H" $h
+
+	printf "[[ %s = %s ]]\n" "${imgnorm}_W12" $w12
+	printf "[[ %s = %s ]]\n" "${imgnorm}_H12" $h12
+
+	printf "\n"
+
+	pxpos=$(($pxpos+$pwidth))
+
+	rowfiles[$rowcount]="${rowfiles[$rowcount]}"$'\n'"$pimgname"
+done
+
+# output rows
+tmpfile="$SCRIPTNAME.tmp.$$.png"
+tmprowfiles=""
+i=0
+while [ $i -le $rowcount ]; do
+	tmprowfile="$SCRIPTNAME.tmp.row${i}.$$.png"
+	convert -background none -bordercolor none ${rowfiles[$i]} +append $tmprowfile
+	tmprowfiles="$tmprowfiles"$'\n'"$tmprowfile"
+	i=$(($i+1))
+done
+
+#output final
+if [ "x$flatcolor" = "x" ]; then
+	convert -background none $tmprowfiles -append $tmpfile
+else
+	convert -background $flatcolor $tmprowfiles -append -layers flatten $tmpfile
+fi
+
+# crush it
+if which pngcrush > /dev/null 2>&1; then
+	pngcrush -reduce -blacken $tmpfile $outfilename > /dev/null
+else
+	mv $tmpfile $outfilename
+fi
+
+rm -f $tmpfile
+
+# output final height
+wh=$(identify -format "%w,%h" $outfilename)
+w=${wh%,*}
+h=${wh#*,}
+
+resultheight12=$((($h+0)/2))  # +1 to round up
+resultwidth12=$((($w+0)/2))
+
+sheetname=$(basename $outfilename)
+sheetnamenorm=${prefix}$(printf "%s" ${sheetname%.*} | tr -cd '[:alnum:]' | tr '[a-z]' '[A-Z]')
+
+printf "[[ %s = '%spx %spx;' ]]\n" "${sheetnamenorm}_BGCSS" $w $h
+printf "[[ %s = '%spx %spx;' ]]\n" "${sheetnamenorm}_BGCSS12" $resultwidth12 $resultheight12
+
+printf "\n"
+
+for i in $imgnamelist; do
+	printf "[[ %s = '%spx %spx;' ]]\n" "${i}_BGCSS" $w $h
+	printf "[[ %s = '%spx %spx;' ]]\n" "${i}_BGCSS12" $resultwidth12 $resultheight12
+done
+
+# remove old tmpfiles
+rm -f $SCRIPTNAME.tmp*$$*
+
