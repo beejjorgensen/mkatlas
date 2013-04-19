@@ -2,14 +2,12 @@
 #
 # mkatlas
 #
+# v2.1 2013-04-19
+#
 # Build image atlases (sprites)
 #
 # Script dependencies: bash, ImageMagick (convert, identify)
-# Optional dependencies: pngcrush
-#
-# TODO:
-#   JPEG
-#   different metadata output types
+# Optional dependencies: pngcrush jpgcrush
 #
 
 IFS=$'\n'
@@ -70,6 +68,9 @@ if [ "x$outfilename" = "x" ]; then
 	usageexit
 fi
 
+# get the extension on the outfile type
+outtype=$(printf "%s" ${outfilename##*.} | tr '[:upper:]' '[:lower:]')
+
 # get all image offsets
 
 pxpos=0
@@ -121,7 +122,7 @@ for i in $images; do
 	fi
 
 	# pad the image
-	pimgname="$SCRIPTNAME.tmp.$(basename $imgname .png).$$.png"
+	pimgname="$SCRIPTNAME.tmp.$(basename $imgname).$$.png"
 	convert -background none $imgname -extent ${pwidth}x${pheight} $pimgname
 
 	# offsets after padding
@@ -169,10 +170,17 @@ else
 fi
 
 # crush it
-if which pngcrush > /dev/null 2>&1; then
-	pngcrush -reduce -blacken $tmpfile $outfilename > /dev/null
-else
-	mv $tmpfile $outfilename
+if [ "x$outtype" = "xpng" ]; then
+	if which pngcrush > /dev/null 2>&1; then
+		pngcrush -reduce -blacken $tmpfile $outfilename > /dev/null
+	else
+		mv $tmpfile $outfilename
+	fi
+elif [ "x$outtype" = "xjpg" -o "x$outtype" = "xjpeg" ]; then
+	convert $tmpfile $outfilename
+	if which jpgcrush > /dev/null 2>&1; then
+		jpgcrush $outfilename > /dev/null
+	fi
 fi
 
 rm -f $tmpfile
