@@ -19,6 +19,7 @@ function usageexit {
 	printf "   -n val       set the namespace (prefix) for all variables\n" 1>&2
 	printf "   -r val       set the relative path to the image in the CSS\n" 1>&2
 	printf "   -f #rrggbb   flatten the output with the specified background\n" 1>&2
+	printf "   -q n         JPEG quality in percent\n" 1>&2
 	exit 1
 }
 
@@ -27,6 +28,7 @@ prefix=""
 relpath=""
 flatcolor=""
 images=""
+quality=""
 
 # parse command line
 while [ $# -gt 0 ]; do
@@ -52,6 +54,11 @@ while [ $# -gt 0 ]; do
 		shift
 		if [ $# -lt 1 ]; then usageexit; fi
 		flatcolor=$1"ff"
+
+	elif [ "$1" = "-q" ]; then
+		shift
+		if [ $# -lt 1 ]; then usageexit; fi
+		quality="$1"
 
 	else
 		images="$images"$'\n'"$1"
@@ -177,7 +184,12 @@ if [ "x$outtype" = "xpng" ]; then
 		mv $tmpfile $outfilename
 	fi
 elif [ "x$outtype" = "xjpg" -o "x$outtype" = "xjpeg" ]; then
-	convert $tmpfile $outfilename
+	if [ "x$quality" != "x" ]; then
+		convert $tmpfile -quality $quality% $outfilename
+	else
+		convert $tmpfile $outfilename
+	fi
+
 	if which jpgcrush > /dev/null 2>&1; then
 		jpgcrush $outfilename > /dev/null
 	fi
