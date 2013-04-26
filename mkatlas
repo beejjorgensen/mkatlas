@@ -2,7 +2,7 @@
 #
 # mkatlas
 #
-# v2.1 2013-04-19
+# v2.2 2013-04-25
 #
 # Build image atlases (sprites)
 #
@@ -15,11 +15,24 @@ IFS=$'\n'
 SCRIPTNAME=$(basename $0)
 
 function usageexit {
-	printf "usage: %s -o outfile [options] image [image2 ...]\n\n" $SCRIPTNAME 1>&2
-	printf "   -n val       set the namespace (prefix) for all variables\n" 1>&2
-	printf "   -r val       set the relative path to the image in the CSS\n" 1>&2
-	printf "   -f #rrggbb   flatten the output with the specified background\n" 1>&2
-	printf "   -q n         JPEG quality in percent\n" 1>&2
+	printf "usage: %s -o outfile [options] image [image2 ...]\n\n" $SCRIPTNAME >&2
+	printf "   -n val       set the namespace (prefix) for all variables\n" >&2
+	printf "   -r val       set the relative path to the image in the CSS\n" >&2
+	printf "   -f #rrggbb   flatten the output with the specified background\n" >&2
+	printf "   -q n         JPEG quality in percent\n" >&2
+	printf "   -g filename  goatee metadata output\n" >&2
+	printf "   -j filename  javascript metadata output\n" >&2
+
+	printf "\n" >&2
+
+	exit 1
+}
+
+function errorexit {
+	msg=$1
+
+	printf "%s: %s\n" $SCRIPTNAME $msg >&2
+
 	exit 1
 }
 
@@ -29,6 +42,8 @@ relpath=""
 flatcolor=""
 images=""
 quality=""
+goateefile=""
+javascriptfile=""
 
 # parse command line
 while [ $# -gt 0 ]; do
@@ -59,6 +74,24 @@ while [ $# -gt 0 ]; do
 		shift
 		if [ $# -lt 1 ]; then usageexit; fi
 		quality="$1"
+
+	elif [ "$1" = "-g" ]; then
+		shift
+		if [ $# -lt 1 ]; then usageexit; fi
+		goateefile="$1"
+		exec {goateefp}>$goateefile
+		if [ $? -ne 0 ]; then
+			 errorexit "error opening $goateefile"
+		fi
+
+	elif [ "$1" = "-j" ]; then
+		shift
+		if [ $# -lt 1 ]; then usageexit; fi
+		javascriptfile="$1"
+		exec {jsfp}>$javascriptfile
+		if [ $? -ne 0 ]; then
+			 errorexit "error opening $javascriptfile"
+		fi
 
 	else
 		images="$images"$'\n'"$1"
@@ -105,9 +138,6 @@ for i in $images; do
 
 	imgnamelist="$imgnamelist"$'\n'"$imgnorm"
 
-	printf "[[ %s = '%s' ]]\n" "${imgnorm}_FILENAME" $imgname
-	printf "[[ %s = '%s' ]]\n" "${imgnorm}_ATLAS" ${relpath}$(basename ${outfilename})
-
 	wh=$(identify -format "%w,%h" $imgname)
 
 	w=${wh%,*} # height of actual image, unpadded
@@ -140,18 +170,45 @@ for i in $images; do
 		maxheight=$pheight
 	fi
 
-	printf "[[ %s = -%s ]]\n" "${imgnorm}_X" $pxpos
-	printf "[[ %s = -%s ]]\n" "${imgnorm}_Y" $pypos
-	printf "[[ %s = '-%spx -%spx; /* %s */' ]]\n" "${imgnorm}_XYCSS" $pxpos $pypos $imgname
-	printf "[[ %s = '-%spx -%spx; /* %s */' ]]\n" "${imgnorm}_XYCSS12" $pxpos12 $pypos12 $imgname
+	# goatee output
+	if [ "x$goateefp" != "x" ]; then
+		printf "[[ %s = '%s' ]]\n" "${imgnorm}_FILENAME" $imgname >&$goateefp
+		printf "[[ %s = '%s' ]]\n" "${imgnorm}_ATLAS" ${relpath}$(basename ${outfilename}) >&$goateefp
 
-	printf "[[ %s = %s ]]\n" "${imgnorm}_W" $w
-	printf "[[ %s = %s ]]\n" "${imgnorm}_H" $h
+		printf "[[ %s = -%s ]]\n" "${imgnorm}_X" $pxpos >&$goateefp
+		printf "[[ %s = -%s ]]\n" "${imgnorm}_Y" $pypos >&$goateefp
+		printf "[[ %s = -%s ]]\n" "${imgnorm}_X12" $pxpos12 >&$goateefp
+		printf "[[ %s = -%s ]]\n" "${imgnorm}_Y12" $pypos12 >&$goateefp
+		printf "[[ %s = '-%spx -%spx; /* %s */' ]]\n" "${imgnorm}_XYCSS" $pxpos $pypos $imgname >&$goateefp
+		printf "[[ %s = '-%spx -%spx; /* %s */' ]]\n" "${imgnorm}_XYCSS12" $pxpos12 $pypos12 $imgname >&$goateefp
 
-	printf "[[ %s = %s ]]\n" "${imgnorm}_W12" $w12
-	printf "[[ %s = %s ]]\n" "${imgnorm}_H12" $h12
+		printf "[[ %s = %s ]]\n" "${imgnorm}_W" $w >&$goateefp
+		printf "[[ %s = %s ]]\n" "${imgnorm}_H" $h >&$goateefp
 
-	printf "\n"
+		printf "[[ %s = %s ]]\n" "${imgnorm}_W12" $w12 >&$goateefp
+		printf "[[ %s = %s ]]\n" "${imgnorm}_H12" $h12 >&$goateefp
+
+		printf "\n" >&$goateefp
+	fi
+
+	# js output
+	if [ "x$jsfp" != "x" ]; then
+		printf "var %s = '%s';\n" "${imgnorm}_FILENAME" $imgname >&$jsfp
+		printf "var %s = '%s';\n" "${imgnorm}_ATLAS" ${relpath}$(basename ${outfilename}) >&$jsfp
+
+		printf "var %s = -%s;\n" "${imgnorm}_X" $pxpos >&$jsfp
+		printf "var %s = -%s;\n" "${imgnorm}_Y" $pypos >&$jsfp
+		printf "var %s = -%s;\n" "${imgnorm}_X12" $pxpos12 >&$jsfp
+		printf "var %s = -%s;\n" "${imgnorm}_Y12" $pypos12 >&$jsfp
+
+		printf "var %s = %s;\n" "${imgnorm}_W" $w >&$jsfp
+		printf "var %s = %s;\n" "${imgnorm}_H" $h >&$jsfp
+
+		printf "var %s = %s;\n" "${imgnorm}_W12" $w12 >&$jsfp
+		printf "var %s = %s;\n" "${imgnorm}_H12" $h12 >&$jsfp
+
+		printf "\n" >&$jsfp
+	fi
 
 	pxpos=$(($pxpos+$pwidth))
 
@@ -179,7 +236,7 @@ fi
 # crush it
 if [ "x$outtype" = "xpng" ]; then
 	if which pngcrush > /dev/null 2>&1; then
-		pngcrush -reduce -blacken $tmpfile $outfilename > /dev/null
+		pngcrush -q -reduce -blacken $tmpfile $outfilename > /dev/null
 	else
 		mv $tmpfile $outfilename
 	fi
@@ -208,16 +265,40 @@ resultwidth12=$((($w+0)/2))
 sheetname=$(basename $outfilename)
 sheetnamenorm=${prefix}$(printf "%s" ${sheetname%.*} | tr -cd '[:alnum:]' | tr '[a-z]' '[A-Z]')
 
-printf "[[ %s = '%spx %spx;' ]]\n" "${sheetnamenorm}_BGCSS" $w $h
-printf "[[ %s = '%spx %spx;' ]]\n" "${sheetnamenorm}_BGCSS12" $resultwidth12 $resultheight12
+# goatee output
+if [ "x$goateefp" != "x" ]; then
+	printf "[[ %s = '%spx %spx;' ]]\n" "${sheetnamenorm}_BGCSS" $w $h >&$goateefp
+	printf "[[ %s = '%spx %spx;' ]]\n" "${sheetnamenorm}_BGCSS12" $resultwidth12 $resultheight12 >&$goateefp
 
-printf "\n"
+	printf "\n" >&$goateefp
 
-for i in $imgnamelist; do
-	printf "[[ %s = '%spx %spx;' ]]\n" "${i}_BGCSS" $w $h
-	printf "[[ %s = '%spx %spx;' ]]\n" "${i}_BGCSS12" $resultwidth12 $resultheight12
-done
+	for i in $imgnamelist; do
+		printf "[[ %s = '%spx %spx;' ]]\n" "${i}_BGCSS" $w $h >&$goateefp
+		printf "[[ %s = '%spx %spx;' ]]\n" "${i}_BGCSS12" $resultwidth12 $resultheight12 >&$goateefp
+	done
+fi
+
+# js output
+if [ "x$jsfp" != "x" ]; then
+	printf "var %s = %s;\n" "${sheetnamenorm}_BG_W" $w >&$jsfp
+	printf "var %s = %s;\n" "${sheetnamenorm}_BG_H" $h >&$jsfp
+	printf "var %s = %s;\n" "${sheetnamenorm}_BG_W12" $resultwidth12 >&$jsfp
+	printf "var %s = %s;\n" "${sheetnamenorm}_BG_H12" $resultheight12 >&$jsfp
+
+	printf "\n" >&$jsfp
+
+	for i in $imgnamelist; do
+		printf "var %s = %s;\n" "${i}_BG_W" $w >&$jsfp
+		printf "var %s = %s;\n" "${i}_BG_H" $h >&$jsfp
+		printf "var %s = %s;\n" "${i}_BG_W12" $resultwidth12 >&$jsfp
+		printf "var %s = %s;\n" "${i}_BG_H12" $resultheight12 >&$jsfp
+	done
+fi
 
 # remove old tmpfiles
 rm -f $SCRIPTNAME.tmp*$$*
+
+# close files
+if [ "x$goateefp" != "x" ]; then exec {goateefp}>&-; fi
+if [ "x$jsfp" != "x" ]; then exec {jsfp}>&-; fi
 
