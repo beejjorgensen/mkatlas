@@ -22,6 +22,7 @@ function usageexit {
 	printf "   -q n         JPEG quality in percent\n" >&2
 	printf "   -g filename  goatee metadata output\n" >&2
 	printf "   -j filename  javascript metadata output\n" >&2
+	printf "   -p           add no padding (danger!)\n" >&2
 
 	printf "\n" >&2
 
@@ -44,11 +45,15 @@ images=""
 quality=""
 goateefile=""
 javascriptfile=""
+nopadding=0
 
 # parse command line
 while [ $# -gt 0 ]; do
 	if [ "$1" = "-h" -o "$1" = "--help" ]; then
 		usageexit
+
+	elif [ "$1" = "-p" ]; then
+		nopadding=1
 
 	elif [ "$1" = "-n" ]; then
 		shift
@@ -146,16 +151,21 @@ for i in $images; do
 	w12=$((($w+1)/2))  # +1 to round up
 	h12=$((($h+1)/2))
 
-	# add at least 1 px padding (bottom and right) to an even value:
-	if [ $(($w%2)) -eq 0 ]; then
-		pwidth=$(($w+2))
+	if [[ $nopadding -eq 1 ]]; then
+		pwidth=$w
+		pheight=$h
 	else
-		pwidth=$(($w+1))
-	fi
-	if [ $(($h%2)) -eq 0 ]; then
-		pheight=$(($h+2))
-	else
-		pheight=$(($h+1))
+		# add at least 1 px padding (bottom and right) to an even value:
+		if [ $(($w%2)) -eq 0 ]; then
+			pwidth=$(($w+2))
+		else
+			pwidth=$(($w+1))
+		fi
+		if [ $(($h%2)) -eq 0 ]; then
+			pheight=$(($h+2))
+		else
+			pheight=$(($h+1))
+		fi
 	fi
 
 	# pad the image
@@ -236,7 +246,9 @@ fi
 # crush it
 if [ "x$outtype" = "xpng" ]; then
 	if which pngcrush > /dev/null 2>&1; then
-		pngcrush -q -reduce -blacken $tmpfile $outfilename > /dev/null
+		# this was causing pngcrush to strip the alpha channel??
+		#pngcrush -q -reduce -blacken $tmpfile $outfilename > /dev/null
+		pngcrush -q -blacken $tmpfile $outfilename > /dev/null
 	else
 		mv $tmpfile $outfilename
 	fi
