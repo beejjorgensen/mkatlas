@@ -2,7 +2,7 @@
 #
 # mkatlas
 #
-# v2.3 2013-08-30
+# v2.4 2013-09-10
 #
 # Build image atlases (sprites)
 #
@@ -183,8 +183,8 @@ for i in $images; do
 		printf "[[ %s = -%s ]]\n" "${imgnorm}_Y" $pypos >> "$goateefile"
 		printf "[[ %s = -%s ]]\n" "${imgnorm}_X12" $pxpos12 >> "$goateefile"
 		printf "[[ %s = -%s ]]\n" "${imgnorm}_Y12" $pypos12 >> "$goateefile"
-		printf "[[ %s = '-%spx -%spx; /* %s */' ]]\n" "${imgnorm}_XYCSS" $pxpos $pypos $imgname >> "$goateefile"
-		printf "[[ %s = '-%spx -%spx; /* %s */' ]]\n" "${imgnorm}_XYCSS12" $pxpos12 $pypos12 $imgname >> "$goateefile"
+		printf "[[ %s = '-%spx -%spx;' ]]\n" "${imgnorm}_XYCSS" $pxpos $pypos >> "$goateefile"
+		printf "[[ %s = '-%spx -%spx;' ]]\n" "${imgnorm}_XYCSS12" $pxpos12 $pypos12 >> "$goateefile"
 
 		printf "[[ %s = %s ]]\n" "${imgnorm}_W" $w >> "$goateefile"
 		printf "[[ %s = %s ]]\n" "${imgnorm}_H" $h >> "$goateefile"
@@ -273,6 +273,14 @@ sheetnamenorm=${prefix}$(printf "%s" ${sheetname%.*} | tr -cd '[:alnum:]' | tr '
 
 # goatee output
 if [ "x$goateefile" != "x" ]; then
+	printf "[[ %s = %s ]]\n" "${sheetnamenorm}_BG_W" $w >> "$goateefile"
+	printf "[[ %s = %s ]]\n" "${sheetnamenorm}_BG_H" $h >> "$goateefile"
+
+	printf "[[ %s = %s ]]\n" "${sheetnamenorm}_BG_W12" $resultwidth12 >> "$goateefile"
+	printf "[[ %s = %s ]]\n" "${sheetnamenorm}_BG_H12" $resultheight12 >> "$goateefile"
+
+	printf "\n" >> "$goateefile"
+
 	printf "[[ %s = '%spx %spx;' ]]\n" "${sheetnamenorm}_BGCSS" $w $h >> "$goateefile"
 	printf "[[ %s = '%spx %spx;' ]]\n" "${sheetnamenorm}_BGCSS12" $resultwidth12 $resultheight12 >> "$goateefile"
 
